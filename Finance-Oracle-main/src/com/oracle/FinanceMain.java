@@ -1,23 +1,9 @@
 package com.oracle;
 
-import com.oracle.beans.Admin;
-import com.oracle.beans.User;
-import com.oracle.beans.EMICard;
-import com.oracle.beans.Product;
-import com.oracle.beans.Transaction;
-import com.oracle.beans.PurchaseItem;
-import com.oracle.dao.AdminDAO;
-import com.oracle.dao.UserDAO;
-import com.oracle.dao.EMICardDAO;
-import com.oracle.dao.ProductDAO;
-import com.oracle.dao.PurchaseDAO;
-import com.oracle.dao.TransactionDAO;
-import com.oracle.dao.impl.AdminDAOImpl;
-import com.oracle.dao.impl.UserDAOImpl;
-import com.oracle.dao.impl.EMICardDAOImpl;
-import com.oracle.dao.impl.ProductDAOImpl;
-import com.oracle.dao.impl.PurchaseDAOImpl;
-import com.oracle.dao.impl.TransactionDAOImpl;
+import com.oracle.beans.*;
+import com.oracle.factory.ServiceFactory;
+import com.oracle.service.*;
+
 
 import java.sql.Date;
 import java.util.List;
@@ -27,12 +13,14 @@ public class FinanceMain {
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        AdminDAO adminDAO = new AdminDAOImpl();
-        UserDAO userDAO = new UserDAOImpl();
-        EMICardDAO emicardDAO = new EMICardDAOImpl();
-        ProductDAO productDAO = new ProductDAOImpl();
-        PurchaseDAO purchaseDAO = new PurchaseDAOImpl();
-        TransactionDAO transactionDAO = new TransactionDAOImpl();
+
+        // === Service layer instances ===
+        AdminService adminService = ServiceFactory.getAdminService();
+        UserService userService = ServiceFactory.getUserService();
+        EMICardService emiCardService = ServiceFactory.getEMICardService();
+        ProductService productService = ServiceFactory.getProductService();
+        PurchaseService purchaseService = ServiceFactory.getPurchaseService();
+        TransactionService transactionService = ServiceFactory.getTransactionService();
 
         boolean running = true;
 
@@ -48,16 +36,15 @@ public class FinanceMain {
 
             switch (choice) {
 
-                // ================== ADMIN LOGIN ==================
+                /** ========== ADMIN LOGIN ========== **/
                 case 1 -> {
                     System.out.print("Enter username: ");
                     String adminUsername = scanner.nextLine().trim();
                     System.out.print("Enter password: ");
                     String adminPassword = scanner.nextLine().trim();
 
-                    Admin admin = adminDAO.login(adminUsername, adminPassword);
-                    if (admin != null) {
-                        System.out.println("✅ Welcome Admin: " + admin.getName());
+                    if (adminService.login(adminUsername, adminPassword)) {
+                        System.out.println("✅ Welcome Admin!");
                         boolean adminRunning = true;
                         while (adminRunning) {
                             System.out.println("\n==== Admin Menu ====");
@@ -71,14 +58,14 @@ public class FinanceMain {
                             scanner.nextLine();
 
                             switch (adminChoice) {
-                                case 1 -> emicardDAO.listPendingUsers();
+                                case 1 -> adminService.listPendingUsers();
                                 case 2 -> {
                                     System.out.print("Enter User ID to approve: ");
                                     long uid = scanner.nextLong();
                                     scanner.nextLine();
-                                    emicardDAO.approveUserAndCard(uid);
+                                    adminService.approveUserAndCard(uid);
                                 }
-                                case 3 -> { // Product Management
+                                case 3 -> {
                                     boolean managingProducts = true;
                                     while (managingProducts) {
                                         System.out.println("\n==== Product Management ====");
@@ -103,13 +90,13 @@ public class FinanceMain {
                                                 scanner.nextLine();
                                                 System.out.print("Enter Category: ");
                                                 p.setCategory(scanner.nextLine());
-                                                productDAO.addProduct(p);
+                                                productService.addProduct(p);
                                             }
                                             case 2 -> {
                                                 System.out.print("Enter Product ID to update: ");
                                                 long pid = scanner.nextLong();
                                                 scanner.nextLine();
-                                                Product existing = productDAO.getProductById(pid);
+                                                Product existing = productService.getProductById(pid);
                                                 if (existing != null) {
                                                     System.out.print("Enter New Name: ");
                                                     existing.setName(scanner.nextLine());
@@ -120,7 +107,7 @@ public class FinanceMain {
                                                     scanner.nextLine();
                                                     System.out.print("Enter New Category: ");
                                                     existing.setCategory(scanner.nextLine());
-                                                    productDAO.updateProduct(existing);
+                                                    productService.updateProduct(existing);
                                                 } else {
                                                     System.out.println("❌ Product not found!");
                                                 }
@@ -129,43 +116,29 @@ public class FinanceMain {
                                                 System.out.print("Enter Product ID to delete: ");
                                                 long pid = scanner.nextLong();
                                                 scanner.nextLine();
-                                                productDAO.deleteProduct(pid);
+                                                productService.deleteProduct(pid);
                                             }
                                             case 4 -> {
-                                                List<Product> list = productDAO.getAllProducts();
-                                                if (list.isEmpty()) {
-                                                    System.out.println("No products found.");
-                                                } else {
-                                                    System.out.println("\n--- Product Catalog ---");
-                                                    for (Product pr : list) {
-                                                        System.out.printf("%d. %s | %s | ₹%.2f\n",
-                                                                pr.getProductId(),
-                                                                pr.getName(),
-                                                                pr.getCategory(),
-                                                                pr.getPrice());
-                                                        System.out.println("   " + pr.getDescription());
-                                                    }
-                                                }
+                                                List<Product> list = productService.getAllProducts();
+                                                if (list.isEmpty()) System.out.println("No products found.");
+                                                else list.forEach(pr -> {
+                                                    System.out.printf("%d. %s | %s | ₹%.2f\n", pr.getProductId(), pr.getName(),
+                                                            pr.getCategory(), pr.getPrice());
+                                                    System.out.println("   " + pr.getDescription());
+                                                });
                                             }
                                             case 5 -> managingProducts = false;
                                             default -> System.out.println("❌ Invalid choice.");
                                         }
                                     }
                                 }
-                                case 4 -> { // View all transactions
-                                    List<Transaction> txns = transactionDAO.getAllTransactions();
-                                    if (txns.isEmpty()) {
-                                        System.out.println("No transactions found.");
-                                    } else {
-                                        for (Transaction t : txns) {
-                                            System.out.printf("Txn ID: %d | User: %s | Type: %s | Amount: ₹%.2f | Date: %s\n",
-                                                    t.getTransactionId(),
-                                                    t.getUser().getName(),
-                                                    t.getTransactionType(),
-                                                    t.getAmount(),
-                                                    t.getTransactionDate());
-                                        }
-                                    }
+                                case 4 -> {
+                                    List<Transaction> txns = transactionService.getAllTransactions();
+                                    if (txns.isEmpty()) System.out.println("No transactions found.");
+                                    else txns.forEach(t -> System.out.printf(
+                                            "Txn ID: %d | User: %s | Type: %s | Amount: ₹%.2f | Date: %s\n",
+                                            t.getTransactionId(), t.getUser().getName(),
+                                            t.getTransactionType(), t.getAmount(), t.getTransactionDate()));
                                 }
                                 case 5 -> adminRunning = false;
                                 default -> System.out.println("❌ Invalid choice.");
@@ -176,17 +149,16 @@ public class FinanceMain {
                     }
                 }
 
-                // ================== USER LOGIN ==================
+                /** ========== USER LOGIN ========== **/
                 case 2 -> {
                     System.out.print("Enter username: ");
                     String username = scanner.nextLine().trim();
                     System.out.print("Enter password: ");
                     String password = scanner.nextLine().trim();
 
-                    User user = userDAO.login(username, password);
+                    User user = userService.login(username, password);
                     if (user != null) {
                         System.out.println("✅ Welcome User: " + user.getName());
-
                         boolean userRunning = true;
                         while (userRunning) {
                             System.out.println("\n==== User Menu ====");
@@ -195,73 +167,56 @@ public class FinanceMain {
                             System.out.println("3. View Product Catalog");
                             System.out.println("4. Buy Product");
                             System.out.println("5. View My Purchases");
-                            System.out.println("6. Logout");
+                            System.out.println("6. Pay EMI");
+                            System.out.println("7. Logout");
                             System.out.print("Choose: ");
                             int userChoice = scanner.nextInt();
                             scanner.nextLine();
 
                             switch (userChoice) {
                                 case 1 -> {
-                                    System.out.println("\n--- Profile ---");
-                                    System.out.println("Name: " + user.getName());
-                                    System.out.println("DOB: " + user.getDob());
-                                    System.out.println("Email: " + user.getEmail());
-                                    System.out.println("Phone: " + user.getPhoneNo());
-                                    System.out.println("Address: " + user.getAddress());
-                                    System.out.println("Status: " + user.getStatus());
+                                    System.out.printf("\nName: %s\nDOB: %s\nEmail: %s\nPhone: %s\nAddress: %s\nStatus: %s\n",
+                                            user.getName(), user.getDob(), user.getEmail(),
+                                            user.getPhoneNo(), user.getAddress(), user.getStatus());
                                 }
                                 case 2 -> {
-                                    EMICard card = emicardDAO.getCardByUserId(user.getUserId());
+                                    EMICard card = emiCardService.getCardByUserId(user.getUserId());
                                     if (card != null) {
-                                        System.out.println("\n--- EMI Card Details ---");
-                                        System.out.println("Card Number: " + card.getCardNumber());
-                                        System.out.println("Card Type: " + card.getCardType());
-                                        System.out.println("Limit: " + card.getCardLimit());
-                                        System.out.println("Remaining Limit: " + card.getRemainingLimit());
-                                        System.out.println("Joining Fee: " + card.getJoiningFee());
-                                        System.out.println("Valid Till: " + card.getValidTill());
-                                        System.out.println("Status: " + card.getStatus());
-                                    } else {
-                                        System.out.println("❌ No EMI card found.");
-                                    }
+                                        System.out.printf("\nCard No: %s\nType: %s\nLimit: ₹%.2f\nRemaining: ₹%.2f\nJoining Fee: ₹%.2f\nValid Till: %s\nStatus: %s\n",
+                                                card.getCardNumber(), card.getCardType(), card.getCardLimit(),
+                                                card.getRemainingLimit(), card.getJoiningFee(),
+                                                card.getValidTill(), card.getStatus());
+                                    } else System.out.println("❌ No EMI card found.");
                                 }
                                 case 3 -> {
-                                    List<Product> list = productDAO.getAllProducts();
-                                    if (list.isEmpty()) {
-                                        System.out.println("No products available.");
-                                    } else {
-                                        System.out.println("\n--- Product Catalog ---");
-                                        for (Product pr : list) {
-                                            System.out.printf("%d. %s | %s | ₹%.2f\n",
-                                                    pr.getProductId(),
-                                                    pr.getName(),
-                                                    pr.getCategory(),
-                                                    pr.getPrice());
-                                            System.out.println("   " + pr.getDescription());
-                                        }
-                                    }
+                                    List<Product> list = productService.getAllProducts();
+                                    if (list.isEmpty()) System.out.println("No products available.");
+                                    else list.forEach(pr -> {
+                                        System.out.printf("%d. %s | %s | ₹%.2f\n",
+                                                pr.getProductId(), pr.getName(), pr.getCategory(), pr.getPrice());
+                                        System.out.println("   " + pr.getDescription());
+                                    });
                                 }
                                 case 4 -> {
-                                    EMICard card = emicardDAO.getCardByUserId(user.getUserId());
+                                    EMICard card = emiCardService.getCardByUserId(user.getUserId());
                                     if (card == null || !"Active".equalsIgnoreCase(card.getStatus())) {
                                         System.out.println("❌ You do not have an active EMI card.");
                                         break;
                                     }
-                                    List<Product> prods = productDAO.getAllProducts();
+                                    List<Product> prods = productService.getAllProducts();
                                     if (prods.isEmpty()) {
                                         System.out.println("❌ No products available.");
                                         break;
                                     }
-                                    System.out.println("\n--- Product Catalog ---");
-                                    for (Product p : prods) {
-                                        System.out.printf("%d. %s | %s | ₹%.2f\n",
-                                                p.getProductId(), p.getName(), p.getCategory(), p.getPrice());
+                                    prods.forEach(p -> {
+                                        System.out.printf("%d. %s | %s | ₹%.2f\n", p.getProductId(), p.getName(),
+                                                p.getCategory(), p.getPrice());
                                         System.out.println("   " + p.getDescription());
-                                    }
-                                    System.out.print("Enter Product ID to buy: ");
+                                    });
+                                    System.out.print("Enter Product ID: ");
                                     long pid = scanner.nextLong();
                                     scanner.nextLine();
-                                    Product selected = productDAO.getProductById(pid);
+                                    Product selected = productService.getProductById(pid);
                                     if (selected == null) {
                                         System.out.println("❌ Invalid product ID.");
                                         break;
@@ -273,45 +228,52 @@ public class FinanceMain {
                                         System.out.println("❌ Invalid tenure.");
                                         break;
                                     }
-                                    System.out.print("Confirm purchase of " + selected.getName() +
-                                            " for ₹" + selected.getPrice() + "? (y/n): ");
-                                    String confirm = scanner.nextLine();
-                                    if (confirm.equalsIgnoreCase("y")) {
-                                        purchaseDAO.createPurchase(user, card, List.of(selected), tenure);
-                                    } else {
-                                        System.out.println("Purchase cancelled.");
-                                    }
+                                    System.out.print("Confirm purchase? (y/n): ");
+                                    if (scanner.nextLine().equalsIgnoreCase("y")) {
+                                        purchaseService.createPurchase(user, card, List.of(selected), tenure);
+                                    } else System.out.println("Purchase cancelled.");
                                 }
-                                case 5 -> { // View my purchases
-                                    List<Transaction> txns = transactionDAO.getTransactionsByUserId(user.getUserId());
-                                    if (txns.isEmpty()) {
-                                        System.out.println("No purchases found.");
-                                    } else {
-                                        for (Transaction t : txns) {
-                                            System.out.printf("Purchase ID: %d | Amount: ₹%.2f | Date: %s\n",
-                                                    t.getPurchase().getPurchaseId(),
-                                                    t.getAmount(),
-                                                    t.getTransactionDate());
-                                            if (t.getPurchase().getItems() != null) {
-                                                for (PurchaseItem item : t.getPurchase().getItems()) {
-                                                    System.out.printf("   - %s (₹%.2f)\n",
-                                                            item.getProduct().getName(),
-                                                            item.getPrice());
-                                                }
+                                case 5 -> {
+                                    List<Transaction> txns = transactionService.getTransactionsByUserId(user.getUserId());
+                                    if (txns.isEmpty()) System.out.println("No purchases found.");
+                                    else txns.forEach(t -> {
+                                        System.out.printf("\nPurchase ID: %d | Amount: ₹%.2f | Date: %s\n",
+                                                t.getPurchase().getPurchaseId(), t.getAmount(), t.getTransactionDate());
+                                        if (t.getPurchase().getItems() != null) {
+                                            for (PurchaseItem item : t.getPurchase().getItems()) {
+                                                System.out.printf("   - %s (₹%.2f)\n", item.getProduct().getName(), item.getPrice());
                                             }
                                         }
+                                    });
+                                }
+                                case 6 -> {
+                                    List<Purchase> ongoing = purchaseService.getOngoingPurchasesByUser(user.getUserId());
+                                    if (ongoing.isEmpty()) {
+                                        System.out.println("No ongoing purchases.");
+                                    } else {
+                                        ongoing.forEach(p -> {
+                                            double emiAmt = (p.getTotalAmount() + p.getProcessingFee()) / p.getTenureMonths();
+                                            System.out.printf("Purchase ID: %d | EMI: ₹%.2f | Paid: %d/%d | Status: %s\n",
+                                                    p.getPurchaseId(), emiAmt, p.getPaidEmis(), p.getTenureMonths(), p.getStatus());
+                                        });
+                                        System.out.print("Enter Purchase ID to pay EMI: ");
+                                        long pid = scanner.nextLong();
+                                        scanner.nextLine();
+                                        ongoing.stream().filter(p -> p.getPurchaseId() == pid).findFirst()
+                                                .ifPresentOrElse(purchaseService::payNextEMI,
+                                                        () -> System.out.println("❌ Invalid Purchase ID."));
                                     }
                                 }
-                                case 6 -> userRunning = false;
+                                case 7 -> userRunning = false;
                                 default -> System.out.println("❌ Invalid choice.");
                             }
                         }
                     } else {
-                        System.out.println("❌ Invalid User Credentials or Account Inactive");
+                        System.out.println("❌ Invalid credentials or inactive account.");
                     }
                 }
 
-                // ================== NEW USER REGISTRATION ==================
+                /** ========== NEW USER REGISTRATION ========== **/
                 case 3 -> {
                     User newUser = new User();
                     System.out.print("Enter Name: ");
@@ -330,10 +292,10 @@ public class FinanceMain {
                     newUser.setPassword(scanner.nextLine().trim());
                     System.out.print("Select EMI Card Type (Gold/Titanium): ");
                     String type = scanner.nextLine().trim();
-                    userDAO.registerNewUser(newUser, type);
+                    userService.registerNewUser(newUser, type);
                 }
 
-                // ================== EXIT ==================
+                /** ========== EXIT ========== **/
                 case 4 -> {
                     System.out.println("👋 Exiting... Goodbye!");
                     running = false;

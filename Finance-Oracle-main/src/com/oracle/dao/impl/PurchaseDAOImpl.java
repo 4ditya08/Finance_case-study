@@ -86,4 +86,63 @@ public class PurchaseDAOImpl implements PurchaseDAO {
             em.close();
         }
     }
+    
+    @Override
+    public List<Purchase> getOngoingPurchasesByUser(Long userId) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            return em.createQuery(
+                "SELECT p FROM Purchase p WHERE p.user.userId = :uid AND p.status = 'Ongoing' ORDER BY p.purchaseDate",
+                Purchase.class)
+                .setParameter("uid", userId)
+                .getResultList();
+        } finally {
+            em.close();
+        }
+    }
+
+    @Override
+    public void payNextEMI(Purchase purchase) {
+        EntityManager em = emf.createEntityManager();
+        EntityTransaction tx = em.getTransaction();
+        try {
+            tx.begin();
+
+            Purchase dbPurchase = em.find(Purchase.class, purchase.getPurchaseId());
+            EMICard card = dbPurchase.getCard();
+            User user = dbPurchase.getUser();
+
+            double emiAmount = (dbPurchase.getTotalAmount() + dbPurchase.getProcessingFee()) / dbPurchase.getTenureMonths();
+
+            // Add EMI Payment transaction
+            Transaction emiTxn = new Transaction();
+            emiTxn.setUser(user);
+            emiTxn.setPurchase(dbPurchase);
+            emiTxn.setAmount(emiAmount);
+            emiTxn.setTransactionType("EMI Payment");
+            em.persist(emiTxn);
+
+            // Increase Remaining Limit
+            card.setRemainingLimit(card.getRemainingLimit() + emiAmount);
+            em.merge(card);
+
+            // Update paidEmis count
+            dbPurchase.setPaidEmis(dbPurchase.getPaidEmis() + 1);
+
+            // If fully paid, mark as Completed
+            if (dbPurchase.getPaidEmis() >= dbPurchase.getTenureMonths()) {
+                dbPurchase.setStatus("Completed");
+            }
+            em.merge(dbPurchase);
+
+            tx.commit();
+            System.out.println("✅ EMI of ₹" + emiAmount + " paid successfully.");
+        } catch (Exception e) {
+            if (tx.isActive()) tx.rollback();
+            e.printStackTrace();
+        } finally {
+            em.close();
+        }
+    }
+
 }
